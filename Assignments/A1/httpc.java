@@ -1,10 +1,13 @@
-import java.io.*;
-import java.net.*;
-import java.util.*;
-//import org.json.JSONObject;
+import java.io.EOFException;
+import java.io.IOException;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.OutputStreamWriter;
+import java.io.InputStreamReader;
+import java.net.Socket;
+import java.net.InetAddress;
 import java.util.Map;
-
-import javax.net.ssl.HttpsURLConnection;
+import java.util.ArrayList;
 
 public class httpc {
 
@@ -104,7 +107,7 @@ public class httpc {
                 }
                 case "post": {
                     httpc http = new httpc();
-                    http.sendPost(args[1], "");
+                    http.sendPost(args);
                     break;
                 }
                 default:
@@ -194,7 +197,7 @@ public class httpc {
                 System.out.println(contents);
                 break;
             case "h":
-                
+                System.out.println(contents);
                 break;
                 
             case "vh":
@@ -218,54 +221,119 @@ public class httpc {
      
      
      **************************************************/
-    private void sendPost(String url, String commandOptions) throws Exception {
+    private void sendPost(String[] commandLine) throws Exception {
 
         BufferedWriter bw = null;
         BufferedReader br = null;
-        String contents = "";
+        String content = "";
         String detailedResponse = "";
-        String associatedHeaders = "";
+        boolean showDetail = false;
         
         try {
             int port = 80;
-            int separateIndex = url.indexOf("/", 7);
             String host = "";
             String path = "";
-            if (-1 == separateIndex) {
-                host = url.substring(7, url.length());
+            String url = "";
+            ArrayList<String> headers = new ArrayList<String>();
+            String data = "";
+            String fileName = "";
+            int numOfToken = commandLine.length;
+            boolean validURL = false;
+            
+            // Parsing command line arguments
+            for (int i = 1; i < numOfToken; ++i) {
+                String option = commandLine[i];
+                switch (option) {
+                    case "-v":
+                        showDetail = true;
+                        break;
+                    case "-h":
+                        if (++i < numOfToken && !checkURLFormat(commandLine[i])) {
+                            headers.add(commandLine[i]);
+                        } else {
+                            System.out.println("-h: missing key:value pair(s)");
+                            return;
+                        }
+                        break;
+                    case "-d": case "--d":
+                        if (++i < numOfToken && !checkURLFormat(commandLine[i])) {
+                            data = commandLine[i];
+                        } else {
+                            System.out.println("-d: missing an inline data");
+                            return;
+                        }
+                        break;
+                    case "-f":
+                        if (++i < numOfToken && !checkURLFormat(commandLine[i])) {
+                            fileName = commandLine[i];
+                            //TODO data <- file content
+                        } else {
+                            System.out.println("-f: missing a file name");
+                            return;
+                        }
+                        break;
+                    default:
+                        if (checkURLFormat(option)) {
+                            url = option;
+                            validURL = true;
+                        } else {
+                            System.out.println("post: invalid URL");
+                            return;
+                        }
+                        break;
+                }
+            }
+            
+            // Set host and path
+            if (url.isEmpty()) {
+                System.out.println("post: missing URL");
+                return;
             } else {
-                host = url.substring(7, separateIndex);
-                path = url.substring(separateIndex);
+                int separateIndex = url.indexOf("/", 7);
+                if (-1 == separateIndex) {
+                    host = url.substring(7, url.length());
+                } else {
+                    host = url.substring(7, separateIndex);
+                    path = url.substring(separateIndex);
+                }
             }
             
             Socket socket = new Socket(InetAddress.getByName(host), 80);
             
-            String data = "{\"assignment\": 1}";
             bw = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), "UTF8"));
             bw.write("POST " + path + " HTTP/1.0\r\n");
             bw.write("Host: " + "httpbin.org\r\n");
             bw.write("User-Agent: Concordia-HTTP/1.0\r\n");
-            bw.write("Content-Length:" + data.length() + "\r\n");
-            bw.write("Content-Type:application/json\r\n");
+            
+            // Associates headers to HTTP Request
+            if (!headers.isEmpty()) {
+                for (String header : headers) {
+                    bw.write(header + "\r\n");
+                }
+            }
+            
+            // Associates an inline data to the body HTTP POST request
+            if (!data.isEmpty()) {
+                bw.write("Content-Length:" + data.length() + "\r\n");
+            }
             
             bw.write("\r\n");
             bw.write(data);
             bw.flush();
             
+            // Get response
             br = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            boolean nextPart = false;
             String line;
-            
+            boolean contentPart = false;
             while ((line = br.readLine()) != null) {
-//                if (!nextPart && line.equals("")) {
-//                    nextPart = true;
-//                }
-//                if (!nextPart) {
-//                    detailedResponse += line + "\n";
-//                } else {
-//                    contents += line + "\n";
-//                }
-                System.out.println(line);
+                if (!contentPart && line.equals("")) {
+                    contentPart = true;
+                }
+                if (!contentPart) {
+                    detailedResponse += line + "\n";
+                } else {
+                    content += line + "\n";
+                }
             }
             
         } catch (Exception e) {
@@ -285,6 +353,11 @@ public class httpc {
                 ioe.printStackTrace();
             }
         }
+        
+        // Output response
+        if (showDetail) {
+            System.out.println(detailedResponse);
+        }
+        System.out.println(content);
     }
-
 }
