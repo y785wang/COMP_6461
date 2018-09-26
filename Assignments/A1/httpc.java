@@ -4,6 +4,9 @@ import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.OutputStreamWriter;
 import java.io.InputStreamReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
 import java.net.Socket;
 import java.net.InetAddress;
 import java.util.Map;
@@ -64,45 +67,8 @@ public class httpc {
                     }
                     break;
                 case "get": {
-                    int length = args.length;
-                    if (!checkURLFormat(args[length-1])) {
-                        System.out.println("'" + args[1] + "'" + ": invalid URL");
-                        break;
-                    }
                     httpc http = new httpc();
-                    switch (length) {
-                        case 2:
-                            http.sendGet(args[1], "");
-                            break;
-                        case 3:
-                            switch (args[1]) {
-                                case "-v":
-                                    http.sendGet(args[2], "v");
-                                    break;
-                                case "-h":
-                                    http.sendGet(args[2], "h");
-                                    break;
-                                default:
-                                    System.out.println(args[1] + ": command nor found");
-                                    break;
-                            }
-                            break;
-                        case 4:
-                            if (args[1].equals("-v") && args[2].equals("-h") ||
-                                args[1].equals("-h") && args[2].equals("-v")) {
-                                http.sendGet(args[2], "vh");
-                            } else if (args[1].equals(args[2]) && (args[1].equals("-v") || args[1].equals("-h"))) {
-                                System.out.println(args[1] + ": duplicated command");
-                            } else if (args[1].equals("-v") || args[1].equals("-h")) {
-                                System.out.println(args[2] + ": command nor found");
-                            } else if (args[2].equals("-v") || args[2].equals("-h")) {
-                                System.out.println(args[1] + ": command nor found");
-                            }
-                            break;
-                        default :
-                            System.out.println("too many options");
-                            break;
-                    }
+                    http.sendGet(args);
                     break;
                 }
                 case "post": {
@@ -130,24 +96,83 @@ public class httpc {
 
      
      **************************************************/
-    private void sendGet(String url, String commandOptions) throws Exception {
-
+    private void sendGet(String[] commandLine) throws Exception {
+        
         BufferedWriter bw = null;
         BufferedReader br = null;
-        String contents = "";
+        BufferedWriter bwF = null;
+        String content = "";
         String detailedResponse = "";
-        String associatedHeaders = "";
+        boolean showDetail = false;
         
         try {
             int port = 80;
-            int separateIndex = url.indexOf("/", 7);
             String host = "";
             String path = "";
-            if (-1 == separateIndex) {
-                host = url.substring(7, url.length());
+            String url = "";
+            ArrayList<String> headers = new ArrayList<String>();
+            int numOfToken = commandLine.length;
+            boolean validURL = false;
+            boolean writeInFile = false;
+            
+            // Parsing command line arguments
+            for (int i = 1; i < numOfToken; ++i) {
+                String option = commandLine[i];
+                switch (option) {
+                    case "-v":
+                        // TODO check -v?
+                        showDetail = true;
+                        break;
+                    case "-h":
+                        // TODO check -h?
+                        if (++i < numOfToken && !checkURLFormat(commandLine[i])) {
+                            headers.add(commandLine[i]);
+                        } else {
+                            System.out.println("-h: missing key:value pair(s)");
+                            return;
+                        }
+                        break;
+                    case "-o":
+                        if (++i < numOfToken && !checkURLFormat(commandLine[i])) {
+                            String oFilename = commandLine[i];
+                            File oFile = new File(oFilename);
+                            if (/*oFile.exists()*/ false) {
+                                System.out.println(oFilename + ": output file exists");
+                                return;
+                            } else {
+                                oFile.createNewFile();
+                                bwF = new BufferedWriter(new FileWriter(oFile));
+                                writeInFile = true;
+                            }
+                        } else {
+                            System.out.println("-o: missing a output file name");
+                            return;
+                        }
+                        break;
+                    default:
+                        if (checkURLFormat(option)) {
+                            url = option;
+                            validURL = true;
+                        } else {
+                            System.out.println("post: invalid URL");
+                            return;
+                        }
+                        break;
+                }
+            }
+            
+            // Set host and path
+            if (url.isEmpty()) {
+                System.out.println("post: missing URL");
+                return;
             } else {
-                host = url.substring(7, separateIndex);
-                path = url.substring(separateIndex);
+                int separateIndex = url.indexOf("/", 7);
+                if (-1 == separateIndex) {
+                    host = url.substring(7, url.length());
+                } else {
+                    host = url.substring(7, separateIndex);
+                    path = url.substring(separateIndex);
+                }
             }
             
             Socket socket = new Socket(InetAddress.getByName(host), 80);
@@ -155,30 +180,50 @@ public class httpc {
             bw = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), "UTF8"));
             bw.write("GET " + path + " HTTP/1.0\r\n");
             bw.write("Host: " + "httpbin.org\r\n");
-            bw.write("\r\n\r\n");
-            bw.flush();
+            bw.write("User-Agent: Concordia-HTTP/1.0\r\n");
             
-            br = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            boolean nextPart = false;
-            String line;
-            
-            while ((line = br.readLine()) != null) {
-                if (!nextPart && line.equals("")) {
-                    nextPart = true;
-                }
-                if (!nextPart) {
-                    detailedResponse += line + "\n";
-                } else {
-                    contents += line + "\n";
+            // Associates headers to HTTP Request
+            if (!headers.isEmpty()) {
+                for (String header : headers) {
+                    bw.write(header + "\r\n");
                 }
             }
             
+            bw.write("\r\n");
+            bw.flush();
+            
+            // Get response
+            br = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            String line;
+            boolean contentPart = false;
+            while ((line = br.readLine()) != null) {
+                if (!contentPart && line.equals("")) {
+                    contentPart = true;
+                }
+                if (!contentPart) {
+                    detailedResponse += line + "\n";
+                } else {
+                    content += line + "\n";
+                }
+            }
+            
+            // Generate output
+            String output = "";
+            if (showDetail) {
+                output += detailedResponse;
+            }
+            output += content;
+            
+            // Determine where to output
+            if (writeInFile) {
+                bwF.write(output);
+            } else {
+                System.out.println(output);
+            }
         } catch (Exception e) {
             System.out.println("ERROR of GET: " + e);
             e.printStackTrace();
-        }
-
-        finally {
+        } finally {
             try {
                 if (null != bw) {
                     bw.close();
@@ -186,25 +231,12 @@ public class httpc {
                 if (null != br) {
                     br.close();
                 }
+                if (null != bwF) {
+                    bwF.close();
+                }
             } catch (IOException ioe) {
                 ioe.printStackTrace();
             }
-        }
-        
-        switch (commandOptions) {
-            case "v":
-                System.out.println(detailedResponse);
-                System.out.println(contents);
-                break;
-            case "h":
-                System.out.println(contents);
-                break;
-                
-            case "vh":
-                
-                break;
-            default:
-                System.out.println(contents);
         }
     }
 
@@ -225,6 +257,8 @@ public class httpc {
 
         BufferedWriter bw = null;
         BufferedReader br = null;
+        BufferedWriter bwF = null;
+        BufferedReader brF = null;
         String content = "";
         String detailedResponse = "";
         boolean showDetail = false;
@@ -236,18 +270,22 @@ public class httpc {
             String url = "";
             ArrayList<String> headers = new ArrayList<String>();
             String data = "";
-            String fileName = "";
             int numOfToken = commandLine.length;
             boolean validURL = false;
+            boolean _dOptionDone = false;
+            boolean _fOptionDone = false;
+            boolean writeInFile = false;
             
             // Parsing command line arguments
             for (int i = 1; i < numOfToken; ++i) {
                 String option = commandLine[i];
                 switch (option) {
                     case "-v":
+                        // TODO check -v?
                         showDetail = true;
                         break;
                     case "-h":
+                        // TODO check -h?
                         if (++i < numOfToken && !checkURLFormat(commandLine[i])) {
                             headers.add(commandLine[i]);
                         } else {
@@ -256,28 +294,65 @@ public class httpc {
                         }
                         break;
                     case "-d": case "--d":
-                        if (++i < numOfToken && !checkURLFormat(commandLine[i])) {
+                        // TODO check _dOptionDone?
+                        if (_fOptionDone) {
+                            System.out.println("-d and -f can not be used together");
+                            return;
+                        } else if (++i < numOfToken && !checkURLFormat(commandLine[i])) {
                             data = commandLine[i];
+                            _dOptionDone = true;
                         } else {
                             System.out.println("-d: missing an inline data");
                             return;
                         }
                         break;
                     case "-f":
-                        if (++i < numOfToken && !checkURLFormat(commandLine[i])) {
-                            fileName = commandLine[i];
-                            //TODO data <- file content
+                        // TODO check _fOptionDone?
+                        if (_dOptionDone) {
+                            System.out.println("-d and -f can not be used together");
+                            return;
+                        } else if (++i < numOfToken && !checkURLFormat(commandLine[i])) {
+                            String iFilename = commandLine[i];
+                            File iFile = new File(iFilename);
+                            if (iFile.exists()) {
+                                brF = new BufferedReader(new FileReader(iFile));
+                                String line;
+                                while ((line = brF.readLine()) != null) {
+                                    data += line + "\n";
+                                }
+                                _fOptionDone = true;
+                            } else {
+                                System.out.println(iFilename + ": input file does not exist");
+                                return;
+                            }
                         } else {
-                            System.out.println("-f: missing a file name");
+                            System.out.println("-f: missing a input file name");
+                            return;
+                        }
+                        break;
+                    case "-o":
+                        if (++i < numOfToken && !checkURLFormat(commandLine[i])) {
+                            String oFilename = commandLine[i];
+                            File oFile = new File(oFilename);
+                            if (/*oFile.exists()*/ false) {
+                                System.out.println(oFilename + ": output file exists");
+                                return;
+                            } else {
+                                oFile.createNewFile();
+                                bwF = new BufferedWriter(new FileWriter(oFile));
+                                writeInFile = true;
+                            }
+                        } else {
+                            System.out.println("-o: missing a output file name");
                             return;
                         }
                         break;
                     default:
-                        if (checkURLFormat(option)) {
+                        if (url.isEmpty() && checkURLFormat(option)) {
                             url = option;
                             validURL = true;
                         } else {
-                            System.out.println("post: invalid URL");
+                            System.out.println(option + ": invalid command");
                             return;
                         }
                         break;
@@ -336,12 +411,24 @@ public class httpc {
                 }
             }
             
+            // Generate output
+            String output = "";
+            if (showDetail) {
+                output += detailedResponse;
+            }
+            output += content;
+            
+            // Determine where to output
+            if (writeInFile) {
+                bwF.write(output);
+            } else {
+                System.out.println(output);
+            }
+            
         } catch (Exception e) {
-            System.out.println("ERROR of GET: " + e);
+            System.out.println("ERROR of POST: " + e);
             e.printStackTrace();
-        }
-        
-        finally {
+        } finally {
             try {
                 if (null != bw) {
                     bw.close();
@@ -349,15 +436,15 @@ public class httpc {
                 if (null != br) {
                     br.close();
                 }
+                if (null != brF) {
+                    brF.close();
+                }
+                if (null != bwF) {
+                    bwF.close();
+                }
             } catch (IOException ioe) {
                 ioe.printStackTrace();
             }
         }
-        
-        // Output response
-        if (showDetail) {
-            System.out.println(detailedResponse);
-        }
-        System.out.println(content);
     }
 }
