@@ -175,7 +175,7 @@ public class httpc {
                         }
                         break;
                     case "-d": case "--d":
-                        if (method.equals("get")) {
+                        if (method.equals("GET")) {
                             System.out.println(option + ": invalid command");
                             return;
                         } else {
@@ -193,7 +193,7 @@ public class httpc {
                         }
                         break;
                     case "-f":
-                        if (method.equals("get")) {
+                        if (method.equals("GET")) {
                             System.out.println(option + ": invalid command");
                             return;
                         } else {
