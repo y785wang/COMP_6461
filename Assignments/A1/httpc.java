@@ -239,9 +239,14 @@ public class httpc {
                         }
                         break;
                     default:
-                        if (url.isEmpty() && checkURLFormat(option)) {
-                            url = option;
-                            validURL = true;
+                        if (url.isEmpty()) {
+                            if (checkURLFormat(option)) {
+                                url = option;
+                                validURL = true;
+                            } else {
+                                System.out.println(option + ": invalid URL");
+                                return;
+                            }
                         } else {
                             System.out.println(option + ": invalid command");
                             return;
