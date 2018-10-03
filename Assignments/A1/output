@@ -1,20 +1,19 @@
-HTTP/1.1 418 I'M A TEAPOT
-Connection: close
-Server: gunicorn/19.9.0
-Date: Wed, 26 Sep 2018 22:34:11 GMT
-X-More-Info: http://tools.ietf.org/html/rfc2324
-Access-Control-Allow-Origin: *
-Access-Control-Allow-Credentials: true
-Content-Length: 135
-Via: 1.1 vegur
 
-
-    -=[ teapot ]=-
-
-       _...._
-     .'  _ _ `.
-    | ."` ^ `". _,
-    \_;`"---"`|//
-      |       ;/
-      \_     _/
-        `"""`
+{
+  "args": {}, 
+  "data": "", 
+  "files": {
+    "file": "This is the contents of a file.\r\nblahblahblah...\r\n"
+  }, 
+  "form": {}, 
+  "headers": {
+    "Connection": "close", 
+    "Content-Length": "232", 
+    "Content-Type": "multipart/form-data; boundary=This is Yishi Wang's boundary :D", 
+    "Host": "httpbin.org", 
+    "User-Agent": "Concordia-HTTP/1.0"
+  }, 
+  "json": null, 
+  "origin": "76.69.250.155", 
+  "url": "http://httpbin.org/post"
+}

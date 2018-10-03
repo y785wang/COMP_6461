@@ -5,12 +5,14 @@ import java.io.BufferedWriter;
 import java.io.OutputStreamWriter;
 import java.io.InputStreamReader;
 import java.io.File;
+import java.nio.file.Files;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.net.Socket;
 import java.net.InetAddress;
 import java.util.Map;
 import java.util.ArrayList;
+//import java.lang.CharSequence;
 
 
 
@@ -136,8 +138,8 @@ public class httpc {
      **************************************************/
     private void sendRequest(String[] commandLine) throws Exception {
         
-        String content = "";
-        String detailedResponse = "";
+        String responseHeader = "";
+        String responseBody = "";
         BufferedWriter bw = null;
         BufferedReader br = null;
         BufferedWriter bwF = null;
@@ -151,21 +153,28 @@ public class httpc {
             String url = "";
             ArrayList<String> headers = new ArrayList<String>();
             String data = "";
+            String httpVersion = "HTTP/1.0";
+            String crlf = "\r\n";
+            String boundry = "This is Yishi Wang's boundary :D";
+            String output = "";
             int numOfToken = commandLine.length;
+            CharSequence code302 = "302";
             boolean validURL = false;
             boolean _dOptionDone = false;
             boolean _fOptionDone = false;
             boolean writeInFile = false;
+            boolean statusCode302 = false;
             
             // Parsing command line arguments
             for (int i = 1; i < numOfToken; ++i) {
                 String option = commandLine[i];
                 switch (option) {
+                    // -v Prints the detail of the response such as protocol, status, and headers
                     case "-v":
                         showDetail = true;
                         break;
+                    // -h key:value Associates headers to HTTP Request with the format
                     case "-h":
-                        // TODO check -h?
                         if (++i < numOfToken && !checkURLFormat(commandLine[i])) {
                             headers.add(commandLine[i]);
                         } else {
@@ -173,16 +182,17 @@ public class httpc {
                             return;
                         }
                         break;
+                    // -d string Associates an inline data to the body HTTP POST request
                     case "-d":
                         if (method.equals("GET")) {
-                            System.out.println(option + ": invalid command");
+                            System.out.println("-d: invalid command for GET request");
                             return;
                         } else {
                             if (_dOptionDone) {
-                                System.out.println(option + ": duplicate option");
+                                System.out.println("-d: duplicate option");
                                 return;
                             } else if (_fOptionDone) {
-                                System.out.println(option + ": -d and -f can not be used together");
+                                System.out.println("-d: -d and -f can not be used together");
                                 return;
                             } else if (++i < numOfToken && !checkURLFormat(commandLine[i])) {
                                 data = commandLine[i];
@@ -193,26 +203,35 @@ public class httpc {
                             }
                         }
                         break;
+                    // -f file Associates the content of a file to the body HTTP POST request
                     case "-f":
                         if (method.equals("GET")) {
-                            System.out.println(option + ": invalid command");
+                            System.out.println("-f: invalid command for GET request");
                             return;
                         } else {
                             if (_fOptionDone) {
-                                System.out.println(option + ": duplicate option");
+                                System.out.println("-f: duplicate option");
                                 return;
                             } else if (_dOptionDone) {
-                                System.out.println(option + ": -d and -f can not be used together");
+                                System.out.println("-f: -d and -f can not be used together");
                                 return;
                             } else if (++i < numOfToken && !checkURLFormat(commandLine[i])) {
                                 String iFilename = commandLine[i];
                                 File iFile = new File(iFilename);
+                                String fileContent = "";
                                 if (iFile.exists()) {
                                     brF = new BufferedReader(new FileReader(iFile));
                                     String line;
                                     while ((line = brF.readLine()) != null) {
-                                        data += line + "\n";
+                                        fileContent += line + "\n";
                                     }
+                                    data += "--" + boundry + crlf;
+                                    data += "Content-Disposition: form-data; name=\"file\"; filename=" + iFilename + crlf;
+                                    data += "Content-Type: text/plain";
+                                    data += "Content-Length:" + fileContent.length() + crlf;
+                                    data += crlf;
+                                    data += fileContent + crlf;
+                                    data += "--" + boundry + "--" + crlf;
                                     _fOptionDone = true;
                                 } else {
                                     System.out.println(iFilename + ": input file does not exist");
@@ -224,6 +243,7 @@ public class httpc {
                             }
                         }
                         break;
+                    // -o filename Write the body of the response to the specific file
                     case "-o":
                         if (++i < numOfToken && !checkURLFormat(commandLine[i])) {
                             String oFilename = commandLine[i];
@@ -272,26 +292,30 @@ public class httpc {
                 }
             }
             
+            // Establish TCP connection through socket
             Socket socket = new Socket(InetAddress.getByName(host), PORT);
             
+            // Prepare request
             bw = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), "UTF8"));
-            bw.write(method + " " + path + " HTTP/1.0\r\n");
-            bw.write("Host: " + host + "\r\n");
-            bw.write("User-Agent: " + USER_AGENT + "\r\n");
+            bw.write(method + " " + path + " " + httpVersion + crlf);
+            bw.write("Host: " + host + crlf);
+            bw.write("User-Agent: " + USER_AGENT + crlf);
+            if (_fOptionDone)
+                bw.write("Content-Type: multipart/form-data; boundary=" + boundry + crlf);
             
-            // Associates headers to HTTP Request
+            // Associates headers to HTTP Request, -h
             if (!headers.isEmpty()) {
                 for (String header : headers) {
-                    bw.write(header + "\r\n");
+                    bw.write(header + crlf);
                 }
             }
             
-            // Associates an inline data to the body HTTP POST request
+            // Associates an inline data or a file to the body HTTP POST request, -d, -f
             if (!data.isEmpty()) {
-                bw.write("Content-Length:" + data.length() + "\r\n");
+                bw.write("Content-Length:" + data.length() + crlf);
             }
             
-            bw.write("\r\n");
+            bw.write(crlf);
             bw.write(data);
             bw.flush();
             
@@ -299,25 +323,28 @@ public class httpc {
             br = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             String line;
             boolean contentPart = false;
+            boolean statusLineChecked = false;
             while ((line = br.readLine()) != null) {
-                if (!contentPart && line.equals("")) {
+                if (!statusLineChecked && line.contains(code302)) {
+                    System.out.println(line);
+                    statusLineChecked = true;
+                } else if (!contentPart && line.equals("")) {
                     contentPart = true;
                 }
                 if (!contentPart) {
-                    detailedResponse += line + "\n";
+                    responseHeader += line + "\n";
                 } else {
-                    content += line + "\n";
+                    responseBody += line + "\n";
                 }
             }
             
             // Generate output
-            String output = "";
             if (showDetail) {
-                output += detailedResponse;
+                output += responseHeader;
             }
-            output += content;
+            output += responseBody;
             
-            // Determine where to output
+            // Determine where to output, -o
             if (writeInFile) {
                 bwF.write(output);
             } else {
