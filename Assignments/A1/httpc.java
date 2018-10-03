@@ -162,7 +162,6 @@ public class httpc {
                 String option = commandLine[i];
                 switch (option) {
                     case "-v":
-                        // TODO check -v?
                         showDetail = true;
                         break;
                     case "-h":
@@ -174,14 +173,16 @@ public class httpc {
                             return;
                         }
                         break;
-                    case "-d": case "--d":
+                    case "-d":
                         if (method.equals("GET")) {
                             System.out.println(option + ": invalid command");
                             return;
                         } else {
-                            // TODO check _dOptionDone?
-                            if (_fOptionDone) {
-                                System.out.println(option + " and -f can not be used together");
+                            if (_dOptionDone) {
+                                System.out.println(option + ": duplicate option");
+                                return;
+                            } else if (_fOptionDone) {
+                                System.out.println(option + ": -d and -f can not be used together");
                                 return;
                             } else if (++i < numOfToken && !checkURLFormat(commandLine[i])) {
                                 data = commandLine[i];
@@ -197,9 +198,11 @@ public class httpc {
                             System.out.println(option + ": invalid command");
                             return;
                         } else {
-                            // TODO check _fOptionDone?
-                            if (_dOptionDone) {
-                                System.out.println("-d and -f can not be used together");
+                            if (_fOptionDone) {
+                                System.out.println(option + ": duplicate option");
+                                return;
+                            } else if (_dOptionDone) {
+                                System.out.println(option + ": -d and -f can not be used together");
                                 return;
                             } else if (++i < numOfToken && !checkURLFormat(commandLine[i])) {
                                 String iFilename = commandLine[i];
