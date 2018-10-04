@@ -5,15 +5,12 @@ import java.io.BufferedWriter;
 import java.io.OutputStreamWriter;
 import java.io.InputStreamReader;
 import java.io.File;
-import java.nio.file.Files;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.net.Socket;
 import java.net.InetAddress;
 import java.util.Map;
 import java.util.ArrayList;
-//import java.lang.CharSequence;
-
 
 
 
@@ -138,6 +135,9 @@ public class httpc {
      **************************************************/
     private void sendRequest(String[] commandLine) throws Exception {
         
+        // for test purpose
+        boolean seeRedirectDetail = true;
+        
         String responseHeader = "";
         String responseBody = "";
         BufferedWriter bw = null;
@@ -155,7 +155,7 @@ public class httpc {
             String data = "";
             String httpVersion = "HTTP/1.0";
             String crlf = "\r\n";
-            String boundry = "This is Yishi Wang's boundary :D";
+            String boundry = "This_is_Yishi_Wang's_boundary_:D";
             String output = "";
             int numOfToken = commandLine.length;
             CharSequence code302 = "302";
@@ -163,7 +163,9 @@ public class httpc {
             boolean _dOptionDone = false;
             boolean _fOptionDone = false;
             boolean writeInFile = false;
+            boolean statusLineChecked = false;
             boolean statusCode302 = false;
+            boolean redirect = false;
             
             // Parsing command line arguments
             for (int i = 1; i < numOfToken; ++i) {
@@ -227,12 +229,14 @@ public class httpc {
                                     }
                                     data += "--" + boundry + crlf;
                                     data += "Content-Disposition: form-data; name=\"file\"; filename=" + iFilename + crlf;
-                                    data += "Content-Type: text/plain";
+                                    data += "Content-Type: text/plain" + crlf;
                                     data += "Content-Length:" + fileContent.length() + crlf;
                                     data += crlf;
                                     data += fileContent + crlf;
                                     data += "--" + boundry + "--" + crlf;
+//                                    data = "123";
                                     _fOptionDone = true;
+//                                    System.out.print(data);
                                 } else {
                                     System.out.println(iFilename + ": input file does not exist");
                                     return;
@@ -267,7 +271,7 @@ public class httpc {
                                 url = option;
                                 validURL = true;
                             } else {
-                                System.out.println(option + ": invalid URL");
+                                System.out.println(option + ": invalid command");
                                 return;
                             }
                         } else {
@@ -278,64 +282,93 @@ public class httpc {
                 }
             }
             
-            // Set host and path
-            if (url.isEmpty()) {
-                System.out.println("post: missing URL");
-                return;
-            } else {
-                int separateIndex = url.indexOf("/", 7);
-                if (-1 == separateIndex) {
-                    host = url.substring(7, url.length());
+            while (true) {
+            
+                // Set host and path
+                if (url.isEmpty()) {
+                    System.out.println("post: missing URL");
+                    return;
                 } else {
-                    host = url.substring(7, separateIndex);
-                    path = url.substring(separateIndex);
+                    int separateIndex = url.indexOf("/", 7);
+                    if (-1 == separateIndex) {
+                        host = url.substring(7, url.length());
+                    } else {
+                        host = url.substring(7, separateIndex);
+                        path = url.substring(separateIndex);
+                    }
                 }
-            }
+                
+                // Establish TCP connection through socket
+                Socket socket = new Socket(InetAddress.getByName(host), PORT);
             
-            // Establish TCP connection through socket
-            Socket socket = new Socket(InetAddress.getByName(host), PORT);
+                // Prepare request
+                bw = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), "UTF8"));
+                bw.write(method + " " + path + " " + httpVersion + crlf);
+                bw.write("Host: " + host + crlf);
+                bw.write("User-Agent: " + USER_AGENT + crlf);
+                if (_fOptionDone)
+                    bw.write("Content-Type: multipart/form-data; boundary=" + boundry + crlf);
             
-            // Prepare request
-            bw = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), "UTF8"));
-            bw.write(method + " " + path + " " + httpVersion + crlf);
-            bw.write("Host: " + host + crlf);
-            bw.write("User-Agent: " + USER_AGENT + crlf);
-            if (_fOptionDone)
-                bw.write("Content-Type: multipart/form-data; boundary=" + boundry + crlf);
-            
-            // Associates headers to HTTP Request, -h
-            if (!headers.isEmpty()) {
-                for (String header : headers) {
-                    bw.write(header + crlf);
+                // Associates headers to HTTP Request, -h
+                if (!headers.isEmpty()) {
+                    for (String header : headers) {
+                        bw.write(header + crlf);
+                    }
                 }
-            }
             
-            // Associates an inline data or a file to the body HTTP POST request, -d, -f
-            if (!data.isEmpty()) {
-                bw.write("Content-Length:" + data.length() + crlf);
-            }
-            
-            bw.write(crlf);
-            bw.write(data);
-            bw.flush();
-            
-            // Get response
-            br = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            String line;
-            boolean contentPart = false;
-            boolean statusLineChecked = false;
-            while ((line = br.readLine()) != null) {
-                if (!statusLineChecked && line.contains(code302)) {
-                    System.out.println(line);
-                    statusLineChecked = true;
-                } else if (!contentPart && line.equals("")) {
-                    contentPart = true;
+                // Associates an inline data or a file to the body HTTP POST request, -d, -f
+                if (!data.isEmpty()) {
+                    bw.write("Content-Length:" + data.length() + crlf);
                 }
-                if (!contentPart) {
-                    responseHeader += line + "\n";
-                } else {
-                    responseBody += line + "\n";
+            
+                bw.write(crlf);
+                bw.write(data);
+                bw.flush();
+                
+                // Get response
+                br = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                String responseLine;
+                boolean contentPart = false;
+                while ((responseLine = br.readLine()) != null) {
+                    // Check status code
+                    if (!statusLineChecked && responseLine.contains(code302)) {
+                        statusLineChecked = true;
+                        redirect = true;
+                    } else
+                        if (!contentPart && responseLine.equals("")) {
+                        contentPart = true;
+                    }
+                    // handle redirect location
+                    if (redirect && responseLine.length() > 10 && responseLine.substring(0, 10).equals("Location: ")) {
+                        String newLocation = responseLine.substring(10, responseLine.length());
+                        // determine relative/absolute redirect
+                        if (newLocation.length() >= 7 && newLocation.substring(0, 7).equals("http://")) {
+                            url = newLocation;
+                        } else {
+                            url = "http://" + host + newLocation;
+                        }
+                        if (seeRedirectDetail) {
+                            System.out.println("302: redirect to \"" + url + "\"");
+                        }
+                        break;
+                    }
+                    if (!contentPart) {
+                        responseHeader += responseLine + "\n";
+                    } else {
+                        responseBody += responseLine + "\n";
+                    }
                 }
+                
+                // Check redirect
+                if (redirect) {
+                    statusLineChecked = false;
+                    redirect = false;
+                    responseHeader = "";
+                    responseBody = "";
+                    continue;
+                }
+
+                break;
             }
             
             // Generate output
