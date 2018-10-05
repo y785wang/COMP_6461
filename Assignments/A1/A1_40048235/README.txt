@@ -1,4 +1,6 @@
-Command line test cases
+On terminal, use 'java httpc.java' to compile
+
+Command line basic test cases
 
 Help
     java httpc
@@ -25,4 +27,5 @@ Redirect code302:
 
 Note:
     1) n is any positive integer
-    2) Set variable 'seeRedirectDetail = true' at the top of the sendRequest class (line 140 of http.java) to see the redirect detail
+    2) Set variable 'seeRedirectDetail = false' at the top of the sendRequest class (line 139 of http.java) to hide the redirect detail, default is true
+    3) -v and -h commands support duplicate, -d and -f do not support duplicate
