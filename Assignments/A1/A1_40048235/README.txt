@@ -1,4 +1,4 @@
-On terminal, use 'java httpc.java' to compile
+On terminal, use 'javac httpc.java' to compile
 
 Command line basic test cases
 

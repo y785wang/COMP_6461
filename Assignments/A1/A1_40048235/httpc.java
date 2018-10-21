@@ -13,53 +13,35 @@ import java.util.Map;
 import java.util.ArrayList;
 
 
-
-
+/**
+ * A simple http client
+ */
 public class httpc {
 
     private final String USER_AGENT = "Concordia-HTTP/1.0";
     private final int PORT = 80;
     
     
-    
-    
-    /**************************************************
-     
-     Description:
-     Determine if the given url is start with "http://"
-     
-     Parameters:
-     A string that represents an url
-     
-     Returns:
-     Return true if the given url string satisfy the
-     codition, false otherwise
-     
-     **************************************************/
+    /**
+     * Determine if the given url is start with "http://"
+     * @param url is a string that represents an url
+     * @return true if the given url string satisfy the
+     *      codition, false otherwise
+     */
     private static boolean checkURLFormat(String url) {
         int length = url.length();
         return length > 6 && url.substring(0, 7).equals("http://");
     }
 
     
-    
-    
-    /**************************************************
-     
-     Description:
-     Main function, deal with the command line input,
-     and basic help information about how should a user
-     issues the command to achieve the get and post
-     requests
-     
-     Parameters:
-     A string array of command line arguments
-     
-     Returns:
-     None
-     
-     **************************************************/
-    public static void main(String[] args) throws Exception {
+    /**
+     * Main function, deal with the command line input,
+     * and basic help information about how should a user
+     * issues the command to achieve the get and post
+     * requests
+     * @param args is a string array of command line arguments
+     */
+    public static void main(String[] args) {
         
         if (0 == args.length || (1 == args.length && args[0].equals("help"))) {
             String help = "\n";
@@ -116,24 +98,15 @@ public class httpc {
         }
     }
 
-
     
-    
-    /**************************************************
-     
-     Description:
-     Deal with either get or post request with options,
-     get the result from the server, then output the
-     response
-     
-     Parameters:
-     A string array of command line arguments
-     
-     Returns:
-     None
-     
-     **************************************************/
-    private void sendRequest(String[] commandLine) throws Exception {
+    /**
+     * Deal with either get or post request with options,
+     * get the result from the server, then output the
+     * response
+     * @param commandLine is a string array of command line arguments
+     * @throws Exception
+     */
+    private void sendRequest(String[] commandLine) {
         
         // for test purpose
         boolean seeRedirectDetail = true;

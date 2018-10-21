@@ -1,2 +1,6 @@
-**/Lectures
+Lectures
+httpfs
 *.zip
+*.xml
+*.iml
+*.class
