@@ -19,9 +19,10 @@ import java.util.ArrayList;
 public class httpc {
 
     private final String USER_AGENT = "Concordia-HTTP/1.0";
-    private final int PORT = 80;
-    
-    
+    private int PORT = 80;
+    private int locahostPort = 8080;
+
+
     /**
      * Determine if the given url is start with "http://"
      * @param url is a string that represents an url
@@ -30,7 +31,7 @@ public class httpc {
      */
     private static boolean checkURLFormat(String url) {
         int length = url.length();
-        return length > 6 && url.substring(0, 7).equals("http://");
+        return length >= 9 && url.substring(0, 9).equals("localhost") || length > 6 && url.substring(0, 7).equals("http://");
     }
 
     
@@ -42,7 +43,7 @@ public class httpc {
      * @param args is a string array of command line arguments
      */
     public static void main(String[] args) {
-        
+
         if (0 == args.length || (1 == args.length && args[0].equals("help"))) {
             String help = "\n";
             help += "httpc is a curl-like application but supports HTTP protocol only.\n";
@@ -107,7 +108,7 @@ public class httpc {
      * @throws Exception
      */
     private void sendRequest(String[] commandLine) {
-        
+
         // for test purpose
         boolean seeRedirectDetail = true;
         
@@ -170,7 +171,7 @@ public class httpc {
                                 System.out.println("-d: -d and -f can not be used together");
                                 return;
                             } else if (++i < numOfToken && !checkURLFormat(commandLine[i])) {
-                                data = commandLine[i];
+                                data = commandLine[i] + crlf;
                                 _dOptionDone = true;
                             } else {
                                 System.out.println("-d: missing an inline data");
@@ -198,7 +199,7 @@ public class httpc {
                                     brF = new BufferedReader(new FileReader(iFile));
                                     String line;
                                     while ((line = brF.readLine()) != null) {
-                                        fileContent += line + "\n";
+                                        fileContent += line + crlf;
                                     }
                                     data += "--" + boundry + crlf;
                                     data += "Content-Disposition: form-data; name=\"file\"; filename=" + iFilename + crlf;
@@ -207,9 +208,7 @@ public class httpc {
                                     data += crlf;
                                     data += fileContent + crlf;
                                     data += "--" + boundry + "--" + crlf;
-//                                    data = "123";
                                     _fOptionDone = true;
-//                                    System.out.print(data);
                                 } else {
                                     System.out.println(iFilename + ": input file does not exist");
                                     return;
@@ -261,6 +260,11 @@ public class httpc {
                 if (url.isEmpty()) {
                     System.out.println("post: missing URL");
                     return;
+                } else if (url.length() >= 9 && url.substring(0, 9).equals("localhost")) {
+                    int separateIndex = url.indexOf("/", 9);
+                    host = url.substring(0, 9);
+                    PORT = locahostPort;
+                    if (-1 != separateIndex) { path = url.substring(separateIndex); }
                 } else {
                     int separateIndex = url.indexOf("/", 7);
                     if (-1 == separateIndex) {
@@ -272,8 +276,9 @@ public class httpc {
                 }
                 
                 // Establish TCP connection through socket
+//                Socket socket = new Socket(InetAddress.getByName(host), PORT);
                 Socket socket = new Socket(InetAddress.getByName(host), PORT);
-            
+
                 // Prepare request
                 bw = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), "UTF8"));
                 bw.write(method + " " + path + " " + httpVersion + crlf);
@@ -291,7 +296,7 @@ public class httpc {
             
                 // Associates an inline data or a file to the body HTTP POST request, -d, -f
                 if (!data.isEmpty()) {
-                    bw.write("Content-Length:" + data.length() + crlf);
+                    bw.write("Content-Length: " + data.length() + crlf);
                 }
             
                 bw.write(crlf);
