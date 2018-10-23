@@ -123,7 +123,7 @@ public class httpc {
         try {
             String method = commandLine[0].equals("get") ? "GET" : "POST";
             String host = "";
-            String path = "";
+            String path = "/";
             String url = "";
             ArrayList<String> headers = new ArrayList<String>();
             String data = "";
