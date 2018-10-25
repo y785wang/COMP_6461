@@ -18,18 +18,21 @@ class handleClientRequest implements Runnable {
 
     public void run() {
         try {
-            // get client request
-            BufferedReader br = new BufferedReader(new InputStreamReader(client.getInputStream()));
-            String method = "";
-            boolean readBody = false;
-            String line;
-            StringBuilder respond = new StringBuilder();
-            String contentType = "plain/text";
-            int contentLength = 0;
-            String filename = "";
-            int statusCode = 200;
-            StringBuilder respondBody = new StringBuilder();
 
+            boolean readBody = false;
+            boolean listAllFiles = false;
+            int contentLength = 0;
+            int statusCode = 200;
+            String method = "";
+            String line;
+            String filePath = "";
+            String contentType = "plain/text";
+            StringBuilder respond = new StringBuilder();
+            StringBuilder respondBody = new StringBuilder();
+            StringBuilder postRequestBody = new StringBuilder();
+            BufferedReader br = new BufferedReader(new InputStreamReader(client.getInputStream()));
+
+            // get client request
             if (printDebugMessage) System.out.println("\n-------------------- Receiving request... --------------------\n");
             while ((line = br.readLine()) != null) {
 
@@ -43,22 +46,21 @@ class handleClientRequest implements Runnable {
                         method = "POST";
                     }
                     int pathBeginAt = line.indexOf("/");
-                    String path = line.substring(pathBeginAt+1, line.indexOf(" ", pathBeginAt+1));
-                    if (!path.isEmpty()) {
-                        int directoryEnd = path.indexOf("/");
-                        filename = -1 != directoryEnd ? path.substring(0, path.indexOf("/")) : path;
-                    }
-                    // TODO: if receive: src/xxx.java, parse it to src, then check if src is directory later for security
+                    filePath = line.substring(pathBeginAt, line.indexOf(" ", pathBeginAt+1));
+                    if (filePath.equals("/")) listAllFiles = true;
                 } else if (0 == contentLength &&  line.length() > 13 && line.substring(0, 14).equals("Content-Length")) {
                     contentLength = Integer.parseInt(line.substring(16));
                 }
 
                 // deal with POST -d or -f
                 if (readBody) {
+                    postRequestBody.append(line).append("\r\n");
                     contentLength -= line.length() + 2;
-                    // TODO: deal with wrong contentLength i.e. contentLength < 0
-                    if (0 != contentLength) {
+                    if (contentLength > 0) {
                         continue;
+                    } else if (contentLength < 0) {
+                        System.out.println("ERROR: contentLength = " + contentLength);
+                        return;
                     } else {
                         break;
                     }
@@ -77,43 +79,36 @@ class handleClientRequest implements Runnable {
             // Dealing with request
             if (printDebugMessage) {
                 System.out.println("\n-------------------- Dealing with request... -----------------\n");
-                System.out.println("Method:   " + method);
-                System.out.println("Filename: \"" + filename + "\"");
+                System.out.println("Method:      " + method);
             }
-            if (method.equals("GET")) {
-                boolean getFileLists = filename.isEmpty();
-                boolean foundFile = false;
-                File curDir = new File(directoryPath);
-                File[] filesList = curDir.listFiles();
-                if (null != filesList) {
-                    for (File file : filesList) {
-                        if(file.isFile()) {
-                            if (getFileLists) {
-                                // TODO: deal with content-type
-                                respondBody.append(file.getName()).append("\n");
-                            } else if (filename.equals(file.getName())) {
-                                foundFile = true;
-                                break;
-                            }
-                        } else if (file.isDirectory() && filename.equals(file.getName())) {
-                            statusCode = 403;
-                            break;
+            if (filePath.length() > 3 && filePath.substring(0, 4).equals("/../")) {
+                statusCode = 403;
+            } else if (method.equals("GET")) {
+                if (listAllFiles) {
+                    printAllFiles(directoryPath, respondBody);
+                } else {
+                    // TODO: when pass is ./ i.e. localhost/././file_1
+                    File getFile = new File(directoryPath + filePath);
+                    if (getFile.exists() && getFile.isFile()) {
+                        BufferedReader getFileContents = new BufferedReader(new FileReader(getFile));
+                        String getLine;
+                        while (null != (getLine = getFileContents.readLine())) {
+                            respondBody.append(getLine).append("\r\n");
                         }
+                    } else {
+                        statusCode = 404;
                     }
                 }
-                if (foundFile) {
-                    // TODO: deal with content-type
-                    BufferedReader getFileBR = new BufferedReader(new FileReader(new File(filename)));
-                    String getFileLine;
-                    while (null != (getFileLine = getFileBR.readLine())) {
-                        respondBody.append(getFileLine).append("\r\n");
-                    }
-                } else if (!getFileLists) {
-                    if (200 == statusCode) statusCode = 404;
-                }
+            } else if (method.equals("POST")) {
+                String contents = postRequestBody.toString();
+                BufferedWriter postFileWriter = new BufferedWriter(new FileWriter(new File(directoryPath + filePath)));
+                // TODO: remove headers,
+                postFileWriter.write(contents);
+                postFileWriter.close();
             }
 
             // Generate responds
+            if (printDebugMessage) System.out.println("Status Code: " + statusCode);
             if (404 == statusCode) {
                 respond.append("HTTP/1.1 404 NOT FOUND\r\n");
                 // TODO: based on the content type
@@ -152,6 +147,20 @@ class handleClientRequest implements Runnable {
                 } catch (Exception e) {
                     client = null;
                     System.out.println("httpFileServer.run(), finally: " + e.getMessage());
+                }
+            }
+        }
+    }
+
+    private void printAllFiles(String path, StringBuilder respondBody) {
+        File curDir = new File(path);
+        File[] filesList = curDir.listFiles();
+        if (null != filesList) {
+            for (File file : filesList) {
+                if(file.isFile()) {
+                    respondBody.append(".").append(file.getPath().substring(directoryPath.length())).append("\r\n");
+                } else if (file.isDirectory()) {
+                    printAllFiles(path + "/" + file.getName(), respondBody);
                 }
             }
         }

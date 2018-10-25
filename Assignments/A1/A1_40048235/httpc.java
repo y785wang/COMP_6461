@@ -31,7 +31,7 @@ public class httpc {
      */
     private static boolean checkURLFormat(String url) {
         int length = url.length();
-        return length >= 9 && url.substring(0, 9).equals("localhost") || length > 6 && url.substring(0, 7).equals("http://");
+        return length > 8 && url.substring(0, 9).equals("localhost") || length > 6 && url.substring(0, 7).equals("http://");
     }
 
     

@@ -1,0 +1,9 @@
+--This_is_Yishi_Wang's_boundary_:D
+Content-Disposition: form-data; name="file"; filename=input
+Content-Type: text/plain
+Content-Length:44
+
+This is input file.
+Some contents here...
+
+--This_is_Yishi_Wang's_boundary_:D--
