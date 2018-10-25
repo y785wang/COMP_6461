@@ -17,6 +17,8 @@ Run client:
   POST:
     java httpc post localhost
     java httpc post localhost -v
+    java httpc post localhost/file_2 -v -f input
+    java httpc post localhost/dir_1/dir_2/files -f input 
 
   Security:
     java httpc get localhost/../ -v
