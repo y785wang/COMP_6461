@@ -6,8 +6,8 @@ import java.util.Calendar;
 
 class handleClientRequest implements Runnable {
 
-    private Socket client;
     private boolean printDebugMessage;
+    private Socket client;
     private String directoryPath;
     private String crlf = "\r\n";
 
@@ -17,15 +17,15 @@ class handleClientRequest implements Runnable {
     private BufferedReader br;
 
     // deal with request
-    private String filePath = "";
     private boolean listAllFiles = false;
+    private String filePath = "";
     private String method = "";
 
     // generate respond
 //    private String contentType = "plain/text";
+    private int statusCode = 200;
     private StringBuilder respond = new StringBuilder();
     private StringBuilder respondBody = new StringBuilder();
-    private int statusCode = 200;
     private ArrayList<String> postRequestBody = new ArrayList<>();
 
     handleClientRequest(Socket client, boolean printDebugMessage, String directoryPath) {
@@ -54,7 +54,7 @@ class handleClientRequest implements Runnable {
             generateRespond();
 
             // send responds to client
-            if (printDebugMessage) System.out.println("\n-------------------- Finish... -------------------------------\n");
+            if (printDebugMessage) System.out.println("\n-------------------- Send respond to client... ---------------\n");
             BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(client.getOutputStream(), StandardCharsets.UTF_8));
             bw.write(respond.toString());
             bw.flush();
@@ -187,6 +187,17 @@ class handleClientRequest implements Runnable {
             BufferedWriter postFileWriter = new BufferedWriter(new FileWriter(postFile));
             postFileWriter.write(extractPostBodyFileContent());
             postFileWriter.close();
+
+            // TODO: for self test purpose, great a big file
+            BufferedWriter testBW = new BufferedWriter(new FileWriter("largeFile", true));
+            for (int j = 0; j < 1; ++j) {
+                StringBuilder hugeContent = new StringBuilder();
+                for (int i = 0; i < 10000; ++i) { // create 1 mb dummy file :D
+                    hugeContent.append("___(╯‵□′)╯︵┻━┻___(╯‵□′)╯︵┻━┻___(╯‵□′)╯︵┻━┻___\n"); // 64 bytes line
+                }
+                testBW.write(hugeContent.toString());
+            }
+            testBW.close();
         }
     }
 
@@ -219,6 +230,7 @@ class handleClientRequest implements Runnable {
         } else {
             respond.append("HTTP/1.1 200 OK\r\n");
             // TODO: show create/overwrite info
+            if (method.equals("POST"))
             respondBody.append("Post file successfully.");
         }
         respond.append("Connection: close\r\n");
