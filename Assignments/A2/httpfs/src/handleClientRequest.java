@@ -3,9 +3,11 @@ import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.HashMap;
 
 class handleClientRequest implements Runnable {
 
+    private static HashMap<String, FileLock> locks = new HashMap<>();
     private boolean printDebugMessage;
     private Socket client;
     private String directoryPath;
@@ -48,9 +50,10 @@ class handleClientRequest implements Runnable {
                 System.out.println("Method:           " + method);
             }
             dealWithRequest();
+            if (printDebugMessage) System.out.println("Status Code:      " + statusCode);
 
             // Generate responds
-            if (printDebugMessage) System.out.println("Status Code:      " + statusCode);
+            if (printDebugMessage) System.out.println("\n-------------------- Generate respond... ---------------------\n");
             generateRespond();
 
             // send responds to client
@@ -60,6 +63,22 @@ class handleClientRequest implements Runnable {
             bw.flush();
             br.close();
             bw.close();
+            if (printDebugMessage) System.out.println("\n-------------------- Finish... -------------------------------\n");
+            Thread.sleep(1000);
+
+            if (method.equals("GET")) {
+                FileLock lock = locks.get(filePath);
+                if (1 == lock.getNumOfReading()) {
+                    locks.remove(filePath);
+                    if (printDebugMessage) System.out.println("Release lock:     " + filePath);
+                } else {
+                    lock.reduceNumOfReading();
+                }
+            } else if (method.equals("POST") && 200 == statusCode) {
+                locks.remove(filePath);
+                if (printDebugMessage) System.out.println("Release lock:     " + filePath);
+            }
+
         } catch (Exception e) {
             System.out.println("HttpFileServer.run(), catch: " + e.getMessage());
         } finally {
@@ -90,6 +109,31 @@ class handleClientRequest implements Runnable {
                 }
                 int pathBeginAt = line.indexOf("/");
                 filePath = line.substring(pathBeginAt, line.indexOf(" ", pathBeginAt+1));
+                if (method.equals("GET")) {
+                    if (locks.containsKey(filePath)) {
+                        FileLock lock = locks.get(filePath);
+                        if (0 == lock.getNumOfWriting()) {
+                            lock.addNumOfReading();
+                        } else {
+                            statusCode = 403;
+                            respondBody.append("File ").append(filePath).append(" is currently being writing.").append(crlf);
+                            return;
+                        }
+                    } else {
+                        FileLock lock = new FileLock(filePath, "READ");
+                        locks.put(filePath, lock);
+                    }
+                } else if (method.equals("POST")) {
+                    if (locks.containsKey(filePath)) {
+                        statusCode = 403;
+                        String readOrWrite = 1 == locks.get(filePath).getNumOfWriting() ? "writing." : "reading.";
+                        respondBody.append("File ").append(filePath).append(" is currently being ").append(readOrWrite).append(crlf);
+                        return;
+                    } else {
+                        FileLock lock = new FileLock(filePath, "WRITE");
+                        locks.put(filePath, lock);
+                    }
+                }
                 if (filePath.equals("/")) listAllFiles = true;
             } else if (0 == contentLength &&  line.length() > 13 && line.substring(0, 14).equals("Content-Length")) {
                 contentLength = Integer.parseInt(line.substring(16));
@@ -119,12 +163,19 @@ class handleClientRequest implements Runnable {
                 }
             }
         }
+
+        Thread.sleep(1000);
     }
 
     private void dealWithRequest() throws Exception {
+        if (printDebugMessage) System.out.println("Lock file:        " + filePath);
+        if (200 != statusCode) return;
         if (filePath.length() > 3 && filePath.substring(0, 4).equals("/../")) {
             statusCode = 403;
-        } else if (method.equals("GET")) {
+            respondBody.append("You tried to leave the working directory, which is not allowed for security reason.\r\n");
+            return;
+        }
+        if (method.equals("GET")) {
             if (listAllFiles) {
                 printAllFiles(directoryPath, respondBody);
             } else {
@@ -188,17 +239,19 @@ class handleClientRequest implements Runnable {
             postFileWriter.write(extractPostBodyFileContent());
             postFileWriter.close();
 
-            // TODO: for self test purpose, great a big file
-            BufferedWriter testBW = new BufferedWriter(new FileWriter("largeFile", true));
-            for (int j = 0; j < 1; ++j) {
-                StringBuilder hugeContent = new StringBuilder();
-                for (int i = 0; i < 10000; ++i) { // create 1 mb dummy file :D
-                    hugeContent.append("___(╯‵□′)╯︵┻━┻___(╯‵□′)╯︵┻━┻___(╯‵□′)╯︵┻━┻___\n"); // 64 bytes line
-                }
-                testBW.write(hugeContent.toString());
-            }
-            testBW.close();
+//            // TODO: for self test purpose, great a big file
+//            BufferedWriter testBW = new BufferedWriter(new FileWriter("largeFile", true));
+//            for (int j = 0; j < 1; ++j) {
+//                StringBuilder hugeContent = new StringBuilder();
+//                for (int i = 0; i < 10000; ++i) { // create 1 mb dummy file :D
+//                    hugeContent.append("___(╯‵□′)╯︵┻━┻___(╯‵□′)╯︵┻━┻___(╯‵□′)╯︵┻━┻___\n"); // 64 bytes line
+//                }
+//                testBW.write(hugeContent.toString());
+//            }
+//            testBW.close();
         }
+
+        Thread.sleep(1000);
     }
 
     private void printAllFiles(String path, StringBuilder respondBody) {
@@ -215,19 +268,17 @@ class handleClientRequest implements Runnable {
         }
     }
 
-    private void generateRespond() {
+    private void generateRespond() throws Exception {
         if (404 == statusCode) {
             respond.append("HTTP/1.1 404 NOT FOUND\r\n");
-            respondBody.append("404 Not Found\r\n");
             respondBody.append("The requested URL was not found on the server.\r\n");
             respondBody.append("If you entered the URL manually, please check you spelling and try again.\r\n");
         } else if (403 == statusCode) {
             respond.append("HTTP/1.1 403 Forbidden\r\n");
-            respondBody.append("403 Forbidden\r\n");
-            respondBody.append("You tried to leave the working directory, which is not allowed for security reason.\r\n");
         } else if (400 == statusCode) {
             respond.append("HTTP/1.1 40 Bad Request\r\n");
         } else {
+            Thread.sleep(1000);
             respond.append("HTTP/1.1 200 OK\r\n");
             // TODO: show create/overwrite info
             if (method.equals("POST"))

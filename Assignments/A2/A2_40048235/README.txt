@@ -24,5 +24,14 @@ Run client:
     java httpc get localhost/../ -v
     java httpc get localhost/../file_outside -v
     java httpc get localhost/src -v
-
     java httpc post localhost/../ -v
+
+  Multi-Request Support:
+    java httpc post localhost/file_2 -v -f input
+    java httpc post localhost/file_2 -v -f input
+
+    java httpc get localhost/file_2 -v
+    java httpc post localhost/file_2 -v -f input
+
+    java httpc get localhost/file_1
+    java httpc get localhost/file_1
