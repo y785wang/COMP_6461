@@ -2,36 +2,31 @@ In terminal, use 'javac *.java' to compile all .java files
 
 Run server:
     java httpfs
-    java httpfs -v
+    java httpfs -v -p 4225
     java httpfs -v -d /files
-
 
 Run client:
 
   GET:
-    java httpc get localhost
     java httpc get localhost -v
-    java httpc get localhost/file_1 -v
-    java httpc get localhost/files/file_inside -v
+    java httpc get localhost/textFile.txt -v
+    java httpc get localhost/files/file_inside.txt -v
 
   POST:
-    java httpc post localhost
     java httpc post localhost -v
-    java httpc post localhost/file_2 -v -f input
-    java httpc post localhost/dir_1/dir_2/files -f input 
+    java httpc post localhost/file_2.txt -v -f input
+    java httpc post localhost/dir_1/dir_2/file_3.txt -f input 
 
   Security:
-    java httpc get localhost/../ -v
     java httpc get localhost/../file_outside -v
-    java httpc get localhost/src -v
     java httpc post localhost/../ -v
 
   Multi-Request Support:
-    java httpc post localhost/file_2 -v -f input
-    java httpc post localhost/file_2 -v -f input
+    java httpc post localhost/file_2.txt -v -f input
+    java httpc post localhost/file_2.txt -v -f input
 
-    java httpc get localhost/file_2 -v
-    java httpc post localhost/file_2 -v -f input
+    java httpc get localhost/file_2.txt -v
+    java httpc post localhost/file_2.txt -v -f input
 
-    java httpc get localhost/file_1
-    java httpc get localhost/file_1
+    java httpc get localhost/textFile.txt -v
+    java httpc get localhost/textFile.txt -v

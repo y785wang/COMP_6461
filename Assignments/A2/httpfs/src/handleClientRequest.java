@@ -12,6 +12,8 @@ class handleClientRequest implements Runnable {
     private Socket client;
     private String directoryPath;
     private String crlf = "\r\n";
+    private String contentType = "";
+    private String contentDisposition = "";
 
     // get client request
     private boolean readBody = false;
@@ -47,10 +49,10 @@ class handleClientRequest implements Runnable {
             // Dealing with request
             if (printDebugMessage) {
                 System.out.println("\n-------------------- Dealing with request... -----------------\n");
-                System.out.println("Method:           " + method);
+                System.out.println("Method:              " + method);
             }
             dealWithRequest();
-            if (printDebugMessage) System.out.println("Status Code:      " + statusCode);
+            if (printDebugMessage) System.out.println("Status Code:         " + statusCode);
 
             // Generate responds
             if (printDebugMessage) System.out.println("\n-------------------- Generate respond... ---------------------\n");
@@ -66,19 +68,20 @@ class handleClientRequest implements Runnable {
             if (printDebugMessage) System.out.println("\n-------------------- Finish... -------------------------------\n");
             Thread.sleep(1000);
 
-            if (method.equals("GET")) {
-                FileLock lock = locks.get(filePath);
-                if (1 == lock.getNumOfReading()) {
+            if (!listAllFiles) {
+                if (method.equals("GET")) {
+                    FileLock lock = locks.get(filePath);
+                    if (1 == lock.getNumOfReading()) {
+                        locks.remove(filePath);
+                        if (printDebugMessage) System.out.println("Release lock:        " + filePath);
+                    } else {
+                        lock.reduceNumOfReading();
+                    }
+                } else if (method.equals("POST") && 200 == statusCode) {
                     locks.remove(filePath);
-                    if (printDebugMessage) System.out.println("Release lock:     " + filePath);
-                } else {
-                    lock.reduceNumOfReading();
+                    if (printDebugMessage) System.out.println("Release lock:        " + filePath);
                 }
-            } else if (method.equals("POST") && 200 == statusCode) {
-                locks.remove(filePath);
-                if (printDebugMessage) System.out.println("Release lock:     " + filePath);
             }
-
         } catch (Exception e) {
             System.out.println("HttpFileServer.run(), catch: " + e.getMessage());
         } finally {
@@ -109,6 +112,10 @@ class handleClientRequest implements Runnable {
                 }
                 int pathBeginAt = line.indexOf("/");
                 filePath = line.substring(pathBeginAt, line.indexOf(" ", pathBeginAt+1));
+                if (filePath.equals("/")) {
+                    listAllFiles = true;
+                    return;
+                }
                 if (method.equals("GET")) {
                     if (locks.containsKey(filePath)) {
                         FileLock lock = locks.get(filePath);
@@ -134,7 +141,6 @@ class handleClientRequest implements Runnable {
                         locks.put(filePath, lock);
                     }
                 }
-                if (filePath.equals("/")) listAllFiles = true;
             } else if (0 == contentLength &&  line.length() > 13 && line.substring(0, 14).equals("Content-Length")) {
                 contentLength = Integer.parseInt(line.substring(16));
             }
@@ -168,7 +174,7 @@ class handleClientRequest implements Runnable {
     }
 
     private void dealWithRequest() throws Exception {
-        if (printDebugMessage) System.out.println("Lock file:        " + filePath);
+        if (!listAllFiles && printDebugMessage) System.out.println("Lock file:           " + filePath);
         if (200 != statusCode) return;
         if (filePath.length() > 3 && filePath.substring(0, 4).equals("/../")) {
             statusCode = 403;
@@ -181,7 +187,20 @@ class handleClientRequest implements Runnable {
             } else {
                 // TODO: when pass is ./ i.e. localhost/././file_1
                 File getFile = new File(directoryPath + filePath);
-                if (getFile.exists() && getFile.isFile()) {
+                String fileType = getFile.toURL().openConnection().getContentType();
+                contentType = fileType;
+                if (contentType.equals("text/plain")) {
+                    contentDisposition = "inline";
+                } else {
+                    contentDisposition = "attachment; filename=" + directoryPath + filePath + ";";
+                }
+                if (printDebugMessage) {
+                    System.out.println("Content Type:        " + fileType);
+                    System.out.println("Content Disposition: " + contentDisposition);
+                }
+                if (!contentType.equals("text/plain")) {
+                    respondBody.append("File type is ").append(contentType).append(", cannot read byte file.");
+                } else if (getFile.exists() && getFile.isFile()) {
                     BufferedReader getFileContents = new BufferedReader(new FileReader(getFile));
                     String getLine;
                     while (null != (getLine = getFileContents.readLine())) {
@@ -192,6 +211,7 @@ class handleClientRequest implements Runnable {
                 }
             }
         } else if (method.equals("POST")) {
+            if (listAllFiles) return;
             File postFile = new File(directoryPath + filePath);
             String postFileName = "";
             String postFilePath = directoryPath + filePath;
@@ -222,19 +242,19 @@ class handleClientRequest implements Runnable {
                 File newDirectory = new File(newDirectoryPath);
                 if (newDirectory.mkdirs()) {
                     if (printDebugMessage) {
-                        System.out.println("Create directory: " + newDirectoryPath);
-                        System.out.println("Create new file:  " + postFilePath);
+                        System.out.println("Create directory:    " + newDirectoryPath);
+                        System.out.println("Create new file:     " + postFilePath);
                     }
                 }
                 postFile = new File(postFilePath);
             } else {
                 if (printDebugMessage && fileExist) {
-                    System.out.println("Overwrite file:   " + postFilePath.substring(1));
+                    System.out.println("Overwrite file:      " + postFilePath.substring(1));
                 } else {
-                    System.out.println("Create new file:  " + postFilePath.substring(1));
+                    System.out.println("Create new file:     " + postFilePath.substring(1));
                 }
             }
-            if (printDebugMessage && !currentDirectory && fileExist) System.out.println("Overwrite file:   " + postFilePath);
+            if (printDebugMessage && !currentDirectory && fileExist) System.out.println("Overwrite file:      " + postFilePath);
             BufferedWriter postFileWriter = new BufferedWriter(new FileWriter(postFile));
             postFileWriter.write(extractPostBodyFileContent());
             postFileWriter.close();
@@ -287,7 +307,7 @@ class handleClientRequest implements Runnable {
         respond.append("Connection: close\r\n");
         respond.append("Server: httpfs\n");
         respond.append("Date: ").append(Calendar.getInstance().getTime().toString()).append(crlf);
-        respond.append("Content-Type: ").append("plain/text").append(crlf);
+        respond.append("Content-Type: ").append(contentType).append(crlf);
         respond.append("Content-Length: ").append(respondBody.length()).append(crlf);
         respond.append(crlf);
         respond.append(respondBody.toString());
