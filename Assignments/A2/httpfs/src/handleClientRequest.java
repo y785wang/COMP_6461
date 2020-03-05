@@ -32,6 +32,8 @@ class handleClientRequest implements Runnable {
     private StringBuilder respondBody = new StringBuilder();
     private ArrayList<String> postRequestBody = new ArrayList<>();
 
+    private boolean oneTimeFlag = true;
+
     handleClientRequest(Socket client, boolean printDebugMessage, String directoryPath) {
         this.client = client;
         this.printDebugMessage = printDebugMessage;
@@ -309,6 +311,7 @@ class handleClientRequest implements Runnable {
         respond.append("Date: ").append(Calendar.getInstance().getTime().toString()).append(crlf);
         respond.append("Content-Type: ").append(contentType).append(crlf);
         respond.append("Content-Length: ").append(respondBody.length()).append(crlf);
+        if (contentType.equals("image/jpeg")) respond.append("Content-Disposition: attachment; filename=attachment").append(crlf);
         respond.append(crlf);
         respond.append(respondBody.toString());
     }
@@ -318,6 +321,10 @@ class handleClientRequest implements Runnable {
         StringBuilder fileContent = new StringBuilder();
         boolean readBody = false;
         for (String line : postRequestBody) {
+            if (oneTimeFlag && !line.equals("--This_is_Yishi_Wang's_boundary_:D\r\n")) {
+                readBody = true;
+            }
+            oneTimeFlag =false;
             if (line.equals(crlf)) {
                 if (!readBody) {
                     readBody = true;
@@ -325,9 +332,11 @@ class handleClientRequest implements Runnable {
                     break;
                 }
             } else if (readBody) {
+                System.out.println("inline data is " + line);
                 fileContent.append(line);
             }
         }
+        oneTimeFlag = true;
         return fileContent.toString();
     }
 }

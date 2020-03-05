@@ -3,3 +3,6 @@ Lectures
 *.xml
 *.iml
 *.class
+/Lecture
+/Assignments/TA
+/java
